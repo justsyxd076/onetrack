@@ -1,0 +1,20 @@
+# Ignore everything
+*
+
+# Except OneTrack files
+!app.py
+!requirements.txt
+!railway.json
+!.gitignore
+
+# Except OneTrack data
+!onetrack.db
+!stderr.txt
+
+# Except static folder
+!static/
+!static/***
+
+# Keep .env and .secret_key secret
+.env
+.secret_key
