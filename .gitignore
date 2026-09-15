@@ -12,6 +12,8 @@
 !auto_sync.py
 !start.py
 !setup_onetrack.bat
+!setup_autostart.bat
+!watchdog.py
 !.env.example
 
 # Except OneTrack data
