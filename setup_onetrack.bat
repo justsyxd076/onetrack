@@ -1,6 +1,5 @@
 @echo off
 REM OneTrack Setup Script for Windows
-REM Run this on the other PC to set up OneTrack
 
 echo ========================================
 echo    OneTrack Setup Script
@@ -15,12 +14,8 @@ python --version >nul 2>&1
 if errorlevel 1 (
     echo Python is not installed!
     echo.
-    echo Please install Python from Microsoft Store:
-    echo    1. Open Microsoft Store
-    echo    2. Search for "Python"
-    echo    3. Install Python 3.12
+    echo Please install Python from Microsoft Store first.
     echo.
-    echo After installing Python, run this script again.
     pause
     exit /b
 )
@@ -33,24 +28,33 @@ REM Check if requirements.txt exists
 if not exist "requirements.txt" (
     echo ERROR: requirements.txt not found!
     echo.
-    echo Make sure you are running this script from the OneTrack folder.
     echo Current directory: %CD%
+    echo.
+    echo Make sure you opened the correct folder.
     echo.
     pause
     exit /b
 )
 
+echo Found requirements.txt
+echo.
+
 REM Install dependencies
-echo Installing dependencies...
+echo Installing dependencies... This may take a minute.
+echo.
 pip install -r requirements.txt
 if errorlevel 1 (
+    echo.
     echo Error installing dependencies!
+    echo.
     pause
     exit /b
 )
 
 echo.
-echo Dependencies installed successfully!
+echo ========================================
+echo    Dependencies Installed!
+echo ========================================
 echo.
 
 REM Get PC's IP address
@@ -61,13 +65,11 @@ echo %IP%
 echo.
 
 echo ========================================
-echo    Setup Complete!
+echo    Choose How to Run OneTrack
 echo ========================================
 echo.
-echo Choose how to run OneTrack:
-echo.
 echo    1. Normal mode (manual start)
-echo    2. Watchdog mode (auto-restart if crashed)
+echo    2. Watchdog mode (auto-restart)
 echo    3. Auto-start on boot (recommended)
 echo.
 set /p choice="Enter choice (1-3): "
@@ -81,7 +83,6 @@ if "%choice%"=="1" (
 ) else if "%choice%"=="2" (
     echo.
     echo Starting OneTrack with watchdog...
-    echo App will auto-restart if it crashes.
     echo Press Ctrl+C to stop.
     echo.
     python watchdog.py
@@ -94,6 +95,8 @@ if "%choice%"=="1" (
     python watchdog.py
 ) else (
     echo.
-    echo Invalid choice. Starting in normal mode...
+    echo Starting in normal mode...
     python app.py
 )
+
+pause
