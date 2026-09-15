@@ -3,10 +3,13 @@
 
 # Except OneTrack files
 !app.py
+!database.py
 !requirements.txt
 !.gitignore
 !DEPLOY.md
 !auto_sync.py
+!start.py
+!.env.example
 
 # Except OneTrack data
 !onetrack.db

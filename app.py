@@ -1,5 +1,6 @@
 from flask import Flask, render_template_string, request, redirect, url_for, send_file, flash, jsonify
-import sqlite3
+import sqlite3  # Keep for compatibility
+from database import get_db, get_cursor, execute_query, fetch_one, fetch_all, init_db as db_init, seed_defaults, delete_old_responses, USE_MYSQL
 import traceback
 import openpyxl
 from openpyxl.styles import Border, Side, PatternFill, Font, Alignment
@@ -63,7 +64,7 @@ STAFF_ORDER_DEFAULT = ["AMIN","SAIDUL","ANIK","SIRAZUL","ALIFF","NORAINI","DIMAS
 
 def get_staff_order():
     """Dynamic staff order from DB, falling back to default."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT staff_id FROM team_members ORDER BY id")
     db_staff = [row[0] for row in c.fetchall()]
@@ -100,8 +101,7 @@ for s in STAFF_ORDER_DEFAULT:
         DAILY_TARGETS_DEFAULT[s] = {"combo": 2, "pastry": 2, "shellapp": 2}
 
 def get_daily_targets():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT staff_id, targets FROM team_members")
     result = {}
@@ -122,119 +122,16 @@ def get_monthly_targets(year, month):
     return {s: {tk: dt[s].get(tk, 0) * days for tk in dt[s]} for s in get_staff_order()}
 
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS responses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT, date TEXT,
-        q1 TEXT, q2 TEXT, q3 TEXT, q4 TEXT,
-        q5 TEXT, q6 TEXT, q7 TEXT
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS team_members (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        staff_id TEXT UNIQUE, name TEXT, gender TEXT,
-        picture TEXT, targets TEXT, tasks TEXT,
-        created_at TEXT
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user',
-        display_name TEXT,
-        created_at TEXT,
-        email TEXT DEFAULT '',
-        reset_code TEXT DEFAULT '',
-        reset_expiry TEXT DEFAULT ''
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        task_key TEXT UNIQUE NOT NULL,
-        label TEXT NOT NULL,
-        unit TEXT NOT NULL,
-        sort_order INTEGER DEFAULT 0,
-        active INTEGER DEFAULT 1,
-        created_at TEXT
-    )''')
-    # Seed users if empty
-    c.execute("SELECT COUNT(*) FROM users")
-    if c.fetchone()[0] == 0:
-        users = [
-            ("admin", generate_password_hash("admin123"), "admin", "Administrator"),
-            ("staff", generate_password_hash("staff123"), "user", "Staff Member"),
-        ]
-        for uname, pw_hash, role, display in users:
-            c.execute("INSERT INTO users (username,password_hash,role,display_name,created_at) VALUES (?,?,?,?,?)",
-                      (uname, pw_hash, role, display, datetime.now().isoformat()))
-    # Seed tasks if empty
-    c.execute("SELECT COUNT(*) FROM tasks")
-    if c.fetchone()[0] == 0:
-        default_tasks = [
-            ("lubes", "LUBES", "LITRE", 1),
-            ("combo", "COMBO", "BAG", 2),
-            ("pastry", "PASTRY", "PCS", 3),
-            ("shellapp", "SHELL APP", "REG", 4),
-        ]
-        for tk, label, unit, order in default_tasks:
-            c.execute("INSERT INTO tasks (task_key,label,unit,sort_order,active,created_at) VALUES (?,?,?,?,1,?)",
-                      (tk, label, unit, order, datetime.now().isoformat()))
-    # Seed team_members if empty
-    c.execute("SELECT COUNT(*) FROM team_members")
-    if c.fetchone()[0] == 0:
-        for s in get_staff_order():
-            t = json.dumps(DAILY_TARGETS_DEFAULT.get(s, {}))
-            tasks_list = STAFF_TASKS.get(s, [])
-            c.execute("INSERT INTO team_members (staff_id,name,gender,targets,tasks,created_at) VALUES (?,?,?,?,?,?)",
-                      (s, s.title(), STAFF_GENDER.get(s,"M"), t, json.dumps(tasks_list), datetime.now().isoformat()))
-    else:
-        c.execute("SELECT staff_id, targets FROM team_members")
-        for sid, tstr in c.fetchall():
-            try:
-                t = json.loads(tstr) if tstr else {}
-            except:
-                t = {}
-            needs_fix = not t or any(v > 10 for v in t.values() if isinstance(v, (int, float)))
-            if needs_fix:
-                new_t = DAILY_TARGETS_DEFAULT.get(sid, {})
-                c.execute("UPDATE team_members SET targets=? WHERE staff_id=?", (json.dumps(new_t), sid))
-    conn.commit()
-    conn.close()
-    # Add email/reset columns if missing (migration)
-    conn2 = sqlite3.connect(DB_FILE)
-    c2 = conn2.cursor()
-    for col in ['email', 'reset_code', 'reset_expiry']:
-        try:
-            c2.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT ''")
-        except:
-            pass
-    # Drop password_plain column if it exists
-    try:
-        c2.execute("PRAGMA table_info(users)")
-        columns = [row[1] for row in c2.fetchall()]
-        if 'password_plain' in columns:
-            c2.execute("ALTER TABLE users DROP COLUMN password_plain")
-    except:
-        pass
-    conn2.commit()
-    conn2.close()
-    # Migrate old SHA-256 passwords to werkzeug password hashing
-    _known_pws = {"admin": "admin123", "staff": "staff123", "testadmin": "test1234"}
-    conn3 = sqlite3.connect(DB_FILE)
-    c3 = conn3.cursor()
-    c3.execute("SELECT id, username, password_hash FROM users")
-    for uid, uname, pw_hash in c3.fetchall():
-        if pw_hash and not pw_hash.startswith('pbkdf2:') and not pw_hash.startswith('scrypt:'):
-            real_pw = _known_pws.get(uname, "")
-            if real_pw:
-                c3.execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(real_pw), uid))
-            else:
-                c3.execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash("changeme"), uid))
-    conn3.commit()
-    conn3.close()
+    """Initialize database using database module."""
+    db_init()
+    seed_defaults()
+    # Delete old responses (older than 2 years)
+    deleted = delete_old_responses(years=2)
+    if deleted:
+        print(f"Deleted {deleted} old responses (older than 2 years)")
 
 def get_tasks():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM tasks WHERE active=1 ORDER BY sort_order")
     rows = [dict(r) for r in c.fetchall()]
@@ -242,8 +139,7 @@ def get_tasks():
     return rows
 
 def get_all_tasks():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM tasks ORDER BY sort_order")
     rows = [dict(r) for r in c.fetchall()]
@@ -259,8 +155,7 @@ def get_task_dicts():
 
 def get_staff_tasks_from_db():
     """Load staff task assignments from DB (tasks column authoritative, targets fallback)."""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT staff_id, tasks, targets FROM team_members")
     result = {}
@@ -289,8 +184,7 @@ def get_staff_tasks_from_db():
     return result
 
 def get_all_responses():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM responses ORDER BY id DESC")
     rows = c.fetchall()
@@ -298,7 +192,7 @@ def get_all_responses():
     return rows
 
 def add_response(data):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute('INSERT INTO responses (timestamp,date,q1,q2,q3,q4,q5,q6,q7) VALUES (?,?,?,?,?,?,?,?,?)',
               (datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
@@ -314,7 +208,7 @@ def parse_answer(text):
     return [(n.strip().upper(), float(q)) for n, q in re.findall(r'([A-Za-z]+)\s*-\s*(\d+(?:\.\d+)?)', str(text))]
 
 def process_responses(month=None, year=None):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM responses ORDER BY id")
     rows = c.fetchall()
@@ -380,8 +274,7 @@ def calc_scores(daily, year=None, month=None):
     return scores
 
 def get_team_members():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM team_members ORDER BY id")
     rows = c.fetchall()
@@ -395,7 +288,7 @@ def get_chart_data():
     answer_keys = task_keys_db[:7]
     while len(answer_keys) < 7:
         answer_keys.append("")
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM responses ORDER BY id")
     rows = c.fetchall()
@@ -543,8 +436,7 @@ def _check_rate_limit(key, max_attempts=5, window=60):
     return True
 
 def get_user(username):
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE username=? OR email=?", (username, username))
     row = c.fetchone()
@@ -2443,8 +2335,7 @@ SET NEW PASSWORD
 @app.route("/profile", methods=["GET","POST"])
 @login_required
 def profile():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE username=?", (session["user"],))
     user = dict(c.fetchone())
@@ -2484,8 +2375,7 @@ def profile_verify():
     email = request.args.get("email","") or request.form.get("email","")
     if request.method == "POST":
         code = request.form.get("code","").strip()
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
+        conn = get_db()
         c = conn.cursor()
         c.execute("SELECT * FROM users WHERE email=? AND reset_code=? AND username=?", (email, code, session["user"]))
         u = c.fetchone()
@@ -2522,7 +2412,7 @@ def profile_reset_password():
     if not re.search(r'[A-Z]', new_pw) or not re.search(r'[0-9]', new_pw):
         flash("Password must contain at least 1 uppercase letter and 1 number", "error")
         return redirect(url_for("profile_reset_password", email=email, code=code))
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE email=? AND reset_code=? AND username=?", (email, code, session["user"]))
     u = c.fetchone()
@@ -2543,8 +2433,7 @@ def forgot_password():
             flash("Too many requests. Try again in 5 minutes.", "error")
             return redirect(url_for("forgot_password"))
         email = request.form.get("email","").strip().lower()
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
+        conn = get_db()
         c = conn.cursor()
         c.execute("SELECT * FROM users WHERE email=?", (email,))
         user = c.fetchone()
@@ -2572,8 +2461,7 @@ def verify_code():
             flash("Too many attempts. Try again in 5 minutes.", "error")
             return redirect(url_for("verify_code", email=email))
         code = request.form.get("code","").strip()
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
+        conn = get_db()
         c = conn.cursor()
         c.execute("SELECT * FROM users WHERE email=? AND reset_code=?", (email, code))
         user = c.fetchone()
@@ -2609,7 +2497,7 @@ def reset_password():
     if not re.search(r'[A-Z]', new_pw) or not re.search(r'[0-9]', new_pw):
         flash("Password must contain at least 1 uppercase letter and 1 number", "error")
         return redirect(url_for("reset_password", email=email, code=code))
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE email=? AND reset_code=?", (email, code))
     user = c.fetchone()
@@ -2639,7 +2527,7 @@ def index():
     else:
         sel_month = now.month
     # Get available months from DB
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT date FROM responses")
     available_months = set()
@@ -2792,7 +2680,7 @@ def leaderboard():
     sel_month = request.args.get("month", now.month, type=int)
     sel_year = request.args.get("year", "", type=str)
     # Get available years from DB
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT date FROM responses")
     available_months = set()
@@ -2858,7 +2746,7 @@ def daily_view():
     sel_month = request.args.get("month", datetime.now().month, type=int)
     sel_year = request.args.get("year", "", type=str)
     # Get available years from DB
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT date FROM responses")
     available_months = set()
@@ -2890,7 +2778,7 @@ def daily_view():
     for i, (s, _) in enumerate(ranked[:3]):
         top3_set.add(s)
     # Available months/years from DB
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT DISTINCT date FROM responses")
     available = set()
@@ -2951,7 +2839,7 @@ def form_view():
             q_fields[i] = " ".join(task_buckets.get(tk, []))
         q1, q2, q3, q4, q5, q6, q7 = q_fields
 
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         c = conn.cursor()
         c.execute('INSERT INTO responses (timestamp,date,q1,q2,q3,q4,q5,q6,q7) VALUES (?,?,?,?,?,?,?,?,?)',
                   (datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
@@ -2977,7 +2865,7 @@ def api_sync():
         return jsonify({"error": "No entries"}), 400
     task_keys, _, _ = get_task_dicts()
     staff_tasks = get_staff_tasks_from_db()
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     synced = 0
     for entry in entries:
@@ -3051,7 +2939,7 @@ def team_add():
                     targets[t['task_key']] = int(val) if val else 0
                 except:
                     targets[t['task_key']] = 0
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         c = conn.cursor()
         try:
             c.execute("INSERT INTO team_members (staff_id,name,gender,picture,targets,tasks,created_at) VALUES (?,?,?,?,?,?,?)",
@@ -3073,8 +2961,7 @@ def team_add():
 @admin_required
 def team_edit(staff_id):
     all_tasks_db = get_all_tasks()
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     if request.method == "POST":
         picture = ""
@@ -3134,7 +3021,7 @@ def team_edit(staff_id):
 @app.route("/team/delete/<staff_id>", methods=["POST"])
 @admin_required
 def team_delete(staff_id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     conn.cursor().execute("DELETE FROM team_members WHERE staff_id=?", (staff_id,))
     conn.commit()
     conn.close()
@@ -3224,8 +3111,7 @@ def analysis():
 @app.route("/admin/tasks", methods=["GET","POST"])
 @admin_required
 def admin_tasks():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
 
     # Handle task category CRUD
@@ -3401,8 +3287,7 @@ def admin_records():
         ed_db = ed.strftime("%d/%m/%Y")
         end_date = ed.strftime("%Y-%m-%d")
 
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     query = "SELECT * FROM responses WHERE (substr(date,7,4)||substr(date,4,2)||substr(date,1,2)) >= ? AND (substr(date,7,4)||substr(date,4,2)||substr(date,1,2)) <= ?"
     params = [sd.strftime("%Y%m%d"), ed.strftime("%Y%m%d")]
@@ -3563,8 +3448,7 @@ def admin_records_bulk_update():
         flash("Invalid date range", "error")
         return redirect(url_for("admin_records", view="grid"))
 
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
 
     updated = 0
@@ -3624,7 +3508,7 @@ def admin_records_bulk_delete():
     if not record_ids:
         flash("No records selected", "error")
         return redirect(url_for("admin_records"))
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     placeholders = ",".join(["?"] * len(record_ids))
     c.execute(f"DELETE FROM responses WHERE id IN ({placeholders})", [int(x) for x in record_ids])
@@ -3654,8 +3538,7 @@ def admin_records_bulk_delete_days():
         return redirect(url_for("admin_records", view="grid"))
 
     task_keys, _, _ = get_task_dicts()
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
 
     cleared = 0
@@ -3695,8 +3578,7 @@ def admin_records_bulk_delete_days():
 @app.route("/admin/records/edit/<int:record_id>", methods=["GET","POST"])
 @admin_required
 def admin_record_edit(record_id):
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     c = conn.cursor()
     if request.method == "POST":
         date_str = request.form.get("date","")
@@ -3728,7 +3610,7 @@ def admin_record_edit(record_id):
 @app.route("/admin/records/delete/<int:record_id>", methods=["POST"])
 @admin_required
 def admin_record_delete(record_id):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     conn.cursor().execute("DELETE FROM responses WHERE id=?", (record_id,))
     conn.commit()
     conn.close()
@@ -3764,7 +3646,7 @@ def generate():
 @app.route("/clear", methods=["POST"])
 @admin_required
 def clear():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     conn.cursor().execute("DELETE FROM responses")
     conn.commit()
     conn.close()
@@ -3783,7 +3665,7 @@ FLAT_COLS = ["Site Id", "Site Name", "Date", "Day", "Staff", "Tasks", "Count", "
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 def generate_excel_new(from_date="", to_date="", staff_filter=""):
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM responses ORDER BY id")
     rows = c.fetchall()

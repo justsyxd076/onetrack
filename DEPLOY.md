@@ -1,134 +1,158 @@
-# OneTrack Deployment Guide
+# OneTrack Deployment Guide (Waifly - Free Forever)
 
 ## Prerequisites
-- Oracle Cloud Always Free account
-- SSH key at `~/.ssh/onetrack_key`
-- Gmail app password for SMTP
+- Waifly account (free, no credit card)
+- GitHub account (already have)
+- Gmail app password (already configured)
 
-## Step 1: Create Oracle Cloud VM
+## Step 1: Create Waifly Account
 
-1. Go to https://cloud.oracle.com/free
-2. Sign up / Log in
-3. Create Instance:
-   - Name: `onetrack`
-   - Image: Ubuntu 24.04 (ARM)
-   - Shape: `VM.Standard.A1.Flex` → 2 OCPUs, 12GB RAM
-   - Upload SSH key: `~/.ssh/onetrack_key.pub`
-4. Open ports in Security List:
-   - 22 (SSH)
-   - 80 (HTTP)
-   - 443 (HTTPS)
-   - 5000 (Flask direct)
-   - 9000 (Webhook)
-5. Note the public IP address
+1. Go to https://dash.waifly.com
+2. Sign up with your email
+3. **No credit card required** ✅
 
-## Step 2: First-Time Setup
+## Step 2: Create Server
 
+1. From Servers tab, click "Create"
+2. Choose "Python Egg"
+3. Name: `onetrack`
+4. Location: Paris (or nearest)
+5. **Free plan applies automatically**: 300 MB RAM, 1 GB disk, 30% CPU
+
+## Step 3: Upload Code
+
+### Option A: Git (Recommended)
+1. SSH into your Waifly server (credentials in panel)
+2. Run:
 ```bash
-# From your PC
-python deploy/deploy.py --setup
+git clone https://github.com/justsyxd076/onetrack.git .
 ```
 
-This will:
-- Connect to your VM via SSH
-- Upload all code
-- Install Python, pip, nginx
-- Configure firewall
-- Setup systemd (auto-restart)
-- Setup unattended-upgrades (auto security updates)
-- Setup keep-alive cron (prevents VM reclaim)
+### Option B: File Manager
+1. Use the panel file manager
+2. Upload all files from your local OneTrack folder
 
-## Step 3: Configure Gmail SMTP
+## Step 4: Create MySQL Database
 
-```bash
-# SSH into VM
-ssh -i ~/.ssh/onetrack_key ubuntu@YOUR_VM_IP
+1. In panel, go to Databases tab
+2. Click "Create Database"
+3. Note the credentials:
+   - Host: (shown in panel)
+   - Database: (shown in panel)
+   - User: (shown in panel)
+   - Password: (shown in panel)
 
-# Edit .env
-nano ~/onetrack/.env
+## Step 5: Set Environment Variables
 
-# Fill in:
+In the panel's Startup tab, add these environment variables:
+
+```
+DB_HOST=your-mysql-host
+DB_USER=your-mysql-user
+DB_PASSWORD=your-mysql-password
+DB_NAME=your-mysql-database
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_EMAIL=onetrackpn@gmail.com
-SMTP_PASSWORD=your-app-password
-
-# Restart app
-sudo systemctl restart onetrack
+SMTP_PASSWORD=your-gmail-app-password
 ```
 
-## Step 4: Setup GitHub Webhook (Auto-Deploy)
+## Step 6: Set Startup Command
 
-1. Go to: https://github.com/justsyxd076/onetrack/settings/hooks
-2. Add webhook:
-   - Payload URL: `http://YOUR_VM_IP:9000`
-   - Content type: `application/json`
-   - Secret: `onetrack-webhook-secret-change-me`
-   - Events: Just the push event
-
-## Step 5: Enable Auto-Sync (Any PC)
-
-```bash
-# Run on any PC you develop on
-python auto_sync.py
+In the panel's Startup tab, set:
+```
+python start.py
 ```
 
-This watches for file changes and auto-pushes to GitHub.
-GitHub webhook auto-deploys to VM.
+## Step 7: Start and Test
+
+1. Click "Start" in the panel
+2. Check console for errors
+3. Your app is live at: `http://your-server-name.waifly.com`
+
+## Step 8: Keep Server Alive
+
+Waifly suspends servers offline for 3+ days. To prevent this:
+- The app runs continuously when started
+- If it crashes, enable "Auto-restart" in the panel
+
+---
 
 ## Daily Usage
 
 ### Sales Team
-- Open `http://YOUR_VM_IP` on phone
+- Open `http://your-server-name.waifly.com` on phone
 - Login with credentials
 - Submit forms through PWA
 - Data syncs automatically
 
 ### You (Admin)
 - Edit code on any PC
-- `auto_sync.py` pushes to GitHub
-- GitHub webhook deploys to VM
-- **Live in 3 seconds**
+- Push to GitHub
+- Pull on Waifly server
+- **Live in seconds**
+
+---
 
 ## Useful Commands
 
 ```bash
 # Check app status
-python deploy/deploy.py --status
+curl http://localhost:8000
 
-# Deploy manually
-python deploy/deploy.py
+# View logs
+# Use the panel's console
 
-# SSH into VM
-ssh -i ~/.ssh/onetrack_key ubuntu@YOUR_VM_IP
+# Restart app
+# Use the panel's restart button
 
-# View logs on VM
-sudo journalctl -u onetrack -f
-
-# Restart app on VM
-sudo systemctl restart onetrack
-
-# Update code on VM
-cd ~/onetrack && git pull
+# Update code
+cd ~ && git pull
+# Then restart via panel
 ```
+
+---
 
 ## Architecture
 
 ```
-Any PC → auto_sync.py → GitHub → Webhook → VM (auto-deploy)
-                                                  │
-                                                  ▼
-                                            Flask app (port 80)
-                                                  │
-                                                  ▼
-                                            onetrack.db (SQLite)
+Any PC → GitHub → Waifly Server (MySQL)
+                       │
+                       ▼
+                 Flask app (port from env)
+                       │
+                       ▼
+                 MySQL database (free)
 ```
+
+---
 
 ## Cost
 
 | Service | Cost |
 |---------|------|
-| Oracle Cloud Always Free | $0 forever |
-| Cloudflare Free | $0 forever |
+| Waifly Free | $0 forever |
 | GitHub Free | $0 forever |
+| Gmail SMTP | $0 forever |
 | **Total** | **$0 forever** |
+
+---
+
+## Troubleshooting
+
+### App won't start
+- Check console for errors
+- Verify environment variables are set
+- Check MySQL credentials
+
+### Can't connect to database
+- Verify DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+- Check MySQL is running in panel
+
+### Gmail not sending
+- Verify SMTP_EMAIL and SMTP_PASSWORD
+- Check Gmail app password is correct
+
+### Server suspended
+- Reactivate at unsuspend.waifly.com
+- Enable auto-restart in panel
