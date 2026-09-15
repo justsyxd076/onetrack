@@ -7,13 +7,18 @@ echo    OneTrack Setup Script
 echo ========================================
 echo.
 
+REM Change to the directory where this script is located
+cd /d "%~dp0"
+
 REM Check if Python is installed
 python --version >nul 2>&1
 if errorlevel 1 (
     echo Python is not installed!
     echo.
-    echo Please install Python from: https://www.python.org/downloads/
-    echo Make sure to check "Add Python to PATH" during installation.
+    echo Please install Python from Microsoft Store:
+    echo    1. Open Microsoft Store
+    echo    2. Search for "Python"
+    echo    3. Install Python 3.12
     echo.
     echo After installing Python, run this script again.
     pause
@@ -23,6 +28,17 @@ if errorlevel 1 (
 echo Python found!
 python --version
 echo.
+
+REM Check if requirements.txt exists
+if not exist "requirements.txt" (
+    echo ERROR: requirements.txt not found!
+    echo.
+    echo Make sure you are running this script from the OneTrack folder.
+    echo Current directory: %CD%
+    echo.
+    pause
+    exit /b
+)
 
 REM Install dependencies
 echo Installing dependencies...
