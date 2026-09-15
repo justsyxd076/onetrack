@@ -48,17 +48,36 @@ echo ========================================
 echo    Setup Complete!
 echo ========================================
 echo.
-echo To start OneTrack, run:
-echo    python app.py
+echo Choose how to run OneTrack:
 echo.
-echo Then open in browser:
-echo    http://%IP%:5000
+echo    1. Normal mode (manual start)
+echo    2. Watchdog mode (auto-restart if crashed)
+echo    3. Auto-start on boot (recommended)
 echo.
-echo Sales team can access from same WiFi:
-echo    http://%IP%:5000
-echo.
-echo Press any key to start OneTrack now...
-pause >nul
+set /p choice="Enter choice (1-3): "
 
-REM Start the app
-python app.py
+if "%choice%"=="1" (
+    echo.
+    echo Starting OneTrack...
+    echo Press Ctrl+C to stop.
+    echo.
+    python app.py
+) else if "%choice%"=="2" (
+    echo.
+    echo Starting OneTrack with watchdog...
+    echo App will auto-restart if it crashes.
+    echo Press Ctrl+C to stop.
+    echo.
+    python watchdog.py
+) else if "%choice%"=="3" (
+    echo.
+    echo Setting up auto-start on boot...
+    call setup_autostart.bat
+    echo.
+    echo Starting OneTrack with watchdog...
+    python watchdog.py
+) else (
+    echo.
+    echo Invalid choice. Starting in normal mode...
+    python app.py
+)

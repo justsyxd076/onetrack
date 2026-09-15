@@ -15,13 +15,56 @@ Copy the entire `OneTrack` folder to the other PC.
 1. Open the OneTrack folder
 2. Double-click `setup_onetrack.bat`
 3. Wait for installation to complete
-4. App will start automatically
+4. Choose how to run:
+   - **Option 1:** Normal mode (manual start)
+   - **Option 2:** Watchdog mode (auto-restart if crashed)
+   - **Option 3:** Auto-start on boot (recommended)
 
 ### Step 4: Access from Phones
 1. Make sure all phones are on the same WiFi as the PC
 2. Open browser on phone
 3. Go to: `http://PC-IP-ADDRESS:5000`
 4. Login with credentials
+
+---
+
+## Running Modes
+
+### Normal Mode
+- App runs until you close it
+- You must restart manually if it crashes
+- Use: `python app.py`
+
+### Watchdog Mode (Recommended)
+- App runs in background
+- Auto-restarts if it crashes
+- Use: `python watchdog.py`
+
+### Auto-Start on Boot (Best)
+- App starts when Windows boots
+- Runs silently in background
+- Auto-restarts if it crashes
+- Use: `setup_autostart.bat`
+
+---
+
+## PWA on Mobile Phones
+
+### Install on Android (Samsung, etc.)
+1. Open Chrome on phone
+2. Go to: `http://PC-IP:5000`
+3. Tap menu (3 dots)
+4. Tap "Add to Home screen"
+5. Tap "Install"
+6. App icon appears on home screen
+
+### Install on iPhone
+1. Open Safari on phone
+2. Go to: `http://PC-IP:5000`
+3. Tap Share button (square with arrow)
+4. Tap "Add to Home Screen"
+5. Tap "Add"
+6. App icon appears on home screen
 
 ---
 
@@ -54,17 +97,37 @@ The setup script shows your IP address automatically.
 
 ---
 
-## Keeping App Running
+## Crash Recovery
 
-The app must run 24/7 for sales team to access it.
+### What if PC crashes?
+- **Normal mode:** App stops, must restart manually
+- **Watchdog mode:** App auto-restarts
+- **Auto-start mode:** App auto-starts on boot
 
-### Option 1: Leave PC On
-- Don't shut down the PC
-- App runs as long as PC is on
+### What if power outage?
+- **Normal mode:** App stops, must restart manually
+- **Watchdog mode:** App stops, must run watchdog.py again
+- **Auto-start mode:** App auto-starts when PC boots
 
-### Option 2: Run as Service (Advanced)
-- Use NSSM to run as Windows service
-- Auto-starts when PC boots
+### What if Windows updates?
+- **Normal mode:** App stops, must restart manually
+- **Watchdog mode:** App stops, must run watchdog.py again
+- **Auto-start mode:** App auto-starts after update
+
+---
+
+## Firewall Setup (If Needed)
+
+If phones can't connect:
+
+1. Open Windows Defender Firewall
+2. Click "Advanced settings"
+3. Click "Inbound Rules"
+4. Click "New Rule"
+5. Select "Port"
+6. Enter: `5000`
+7. Click "Allow the connection"
+8. Finish
 
 ---
 
@@ -86,21 +149,7 @@ The app must run 24/7 for sales team to access it.
 ### "App stopped working"
 - PC was shut down or restarted
 - Run `python app.py` again
-
----
-
-## Firewall Setup (If Needed)
-
-If phones can't connect:
-
-1. Open Windows Defender Firewall
-2. Click "Advanced settings"
-3. Click "Inbound Rules"
-4. Click "New Rule"
-5. Select "Port"
-6. Enter: `5000`
-7. Click "Allow the connection"
-8. Finish
+- Or use watchdog mode for auto-restart
 
 ---
 
@@ -112,5 +161,11 @@ If phones can't connect:
 | **Admin login** | admin / admin123 |
 | **User login** | user / user123 |
 | **Cost** | $0 forever |
+| **Credit card** | Not needed |
+| **Approval wait** | None |
+| **Setup time** | 5 minutes |
 | **Internet needed** | No (local network) |
-| **PC must stay on** | Yes |
+| **PC must stay on** | Yes (for access) |
+| **PWA support** | Yes |
+| **Auto-restart** | Yes (watchdog mode) |
+| **Auto-start on boot** | Yes (auto-start mode) |
