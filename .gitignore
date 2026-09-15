@@ -7,8 +7,10 @@
 !requirements.txt
 !.gitignore
 !DEPLOY.md
+!SETUP_LOCAL.md
 !auto_sync.py
 !start.py
+!setup_onetrack.bat
 !.env.example
 
 # Except OneTrack data
