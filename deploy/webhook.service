@@ -1,0 +1,14 @@
+[Unit]
+Description=OneTrack GitHub Webhook Listener
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/onetrack
+Environment="PATH=/home/ubuntu/onetrack/venv/bin"
+ExecStart=/home/ubuntu/onetrack/venv/bin/python deploy/webhook_listener.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

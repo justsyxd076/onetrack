@@ -4,8 +4,9 @@
 # Except OneTrack files
 !app.py
 !requirements.txt
-!railway.json
 !.gitignore
+!DEPLOY.md
+!auto_sync.py
 
 # Except OneTrack data
 !onetrack.db
@@ -15,6 +16,16 @@
 !static/
 !static/***
 
+# Except deploy folder
+!deploy/
+!deploy/***
+
 # Keep .env and .secret_key secret
 .env
 .secret_key
+
+# Keep VM IP secret
+.vm_ip
+
+# Keep SSH keys secret
+.ssh/
